@@ -34,8 +34,8 @@ size_t highestOneBitPosition(unsigned long long a);
 int multiplication_is_safe(unsigned long long a, unsigned long long b);
 int addition_is_safe(unsigned long long a, unsigned long long b);
 
-void do_encode (FILE* in, FILE* out, int wrap_column, int test_only);
-void do_decode (FILE* in, FILE* out, int ignore_garbage);
+int do_encode (FILE* in, FILE* out, int wrap_column, int test_only);
+int do_decode (FILE* in, FILE* out, int ignore_garbage);
 
 
 int main (int argc, char** argv) {
@@ -68,40 +68,41 @@ int main (int argc, char** argv) {
 			op.f = fopen (argv[optind], "rb");
 	}
 
+	int retval;
 	if (op.d) {
-		do_decode (op.f, stdout, op.i);
+		retval = do_decode (op.f, stdout, op.i);
 	} else {
-		do_encode (op.f, stdout, op.w, op.t);
+		retval = do_encode (op.f, stdout, op.w, op.t);
 	}
 
-	if (op.f != stdin) fclose (op.f);
+	if (op.f != stdin) retval = !(fclose (op.f) == 0);
 
-	return 0;
+	return retval;
 }
 
 
 
 
-void do_encode (FILE* in, FILE* out, int wrap_column, int test_only) {
+int do_encode (FILE* in, FILE* out, int wrap_column, int test_only) {
 	int in_len = 0;
 	unsigned long long out_len = 0;
 
 	for (int in_char; (in_char = getc(in)) != EOF; in_len++) {
 		if (!multiplication_is_safe (out_len, BASE)){
-			puts ("overflowed.");
-			return;
+			fputs ("overflowed.", stderr);
+			return 1;
 		}
 		out_len *= BASE;
 		if (!addition_is_safe (out_len, in_char)) {
-			puts ("overflowed.");
-			return;
+			fputs ("overflowed.", stderr);
+			return 1;
 		}
 		out_len += in_char;
 	}
 
 	if (test_only) {
 		printf ("Length of output:\t%llu\nMaximum value of ULL:\t%llu\n", out_len, ULLONG_MAX);
-		return;
+		return 0;
 	}
 
 	unsigned long long block_size = 1;
@@ -114,9 +115,11 @@ void do_encode (FILE* in, FILE* out, int wrap_column, int test_only) {
 	for (unsigned long long i = 0; i < out_len; i++)
 		fprintf (out, "%s%c", wrap_column&&!(i%wrap_column)&&i?"\n":"", 'A');
 		//TODO: use faster function
+
+	return 0;
 }
 
-void do_decode (FILE* in, FILE* out, int ignore_garbage) {
+int do_decode (FILE* in, FILE* out, int ignore_garbage) {
 	unsigned long long in_len = 0;
 
 	for (int in_char; (in_char = getc (in)) != EOF;) {
@@ -126,7 +129,7 @@ void do_decode (FILE* in, FILE* out, int ignore_garbage) {
 			in_len++;
 		} else if (!ignore_garbage) {
 			fprintf (stderr, "Unrecognized glyph %c\n", in_char);
-			return;
+			return 1;
 		}
 		// TODO: check for overflow!
 	}
@@ -149,6 +152,8 @@ void do_decode (FILE* in, FILE* out, int ignore_garbage) {
 	}
 
 	for (int i = 0; i < bin_len; i++) putc (out_buf[i], out);
+
+	return 0;
 }
 
 /* http://stackoverflow.com/a/199455 */
